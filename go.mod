@@ -1,4 +1,4 @@
-module github.com/lepinkainen/gobot
+module github.com/lepinkainen/gobotlite
 
 go 1.20
 
