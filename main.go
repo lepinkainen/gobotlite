@@ -2,25 +2,34 @@ package main
 
 import (
 	"bytes"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
+	"sync"
 
 	irc "github.com/thoj/go-ircevent"
 	"gopkg.in/yaml.v2"
 )
 
-type Config struct {
-	Server   []string `yaml:"server"`
+type Network struct {
 	Channels []string `yaml:"channels"`
-	Nick     string   `yaml:"nick"`
-	Endpoint string   `yaml:"endpoint"`
-	APIKey   string   `yaml:"apiKey"`
+	Server   string   `yaml:"server"`
+	UseTLS   bool     `yaml:"usetls"`
+	Port     int      `yaml:"port"`
+}
+
+type Config struct {
+	Networks map[string]Network `yaml:"networks"`
+	Nickname string             `yaml:"nickname"`
+	Endpoint string             `yaml:"endpoint"`
+	APIKey   string             `yaml:"apiKey"`
 }
 
 type Payload struct {
@@ -32,6 +41,28 @@ type Payload struct {
 type HTTPResponse struct {
 	Title        string `json:"title"`
 	ErrorMessage string `json:"errorMessage"`
+}
+
+func (c *Config) Validate() error {
+	if c.Nickname == "" {
+		return fmt.Errorf("Nickname is missing from configuration")
+	}
+	if c.Endpoint == "" {
+		return fmt.Errorf("Endpoint is missing from configuration")
+	}
+	if c.APIKey == "" {
+		return fmt.Errorf("APIKey is missing from configuration")
+	}
+	for networkName, network := range c.Networks {
+		if network.Server == "" {
+			return fmt.Errorf("Server is missing from configuration for network: %s", networkName)
+		}
+		if len(network.Channels) == 0 {
+			return fmt.Errorf("No channels specified in configuration for network: %s", networkName)
+		}
+		// More specific validations can be added here, such as checking the port range, TLS config, etc.
+	}
+	return nil
 }
 
 func fetchLambdaTitle(config *Config, payload *Payload) (string, error) {
@@ -54,7 +85,7 @@ func fetchLambdaTitle(config *Config, payload *Payload) (string, error) {
 	}
 	defer resp.Body.Close()
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", err
 	}
@@ -93,7 +124,7 @@ func main() {
 	config := Config{}
 
 	// Read the YAML configuration file
-	data, err := ioutil.ReadFile("config.yaml")
+	data, err := os.ReadFile("config.yaml")
 	if err != nil {
 		log.Fatalf("Error reading YAML file: %s\n", err)
 	}
@@ -104,41 +135,67 @@ func main() {
 		log.Fatalf("Error parsing YAML file: %s\n", err)
 	}
 
-	// Create new IRC connection with nickname from config
-	conn := irc.IRC(config.Nick, config.Nick)
-	conn.Debug = true
-
-	// Add callback for IRC connection
-	conn.AddCallback("001", func(e *irc.Event) {
-		for _, channel := range config.Channels {
-			conn.Join(channel)
-		}
-	})
-
-	conn.AddCallback("PRIVMSG", func(e *irc.Event) {
-		words := strings.Fields(e.Message())
-		for _, word := range words {
-			u, err := url.Parse(word)
-			if err != nil {
-				log.Printf("Error parsing potential URL '%s': %s", word, err)
-			} else if u.Scheme != "" && u.Host != "" {
-				// Valid URL detected, handle accordingly
-				log.Printf("URL detected: %s", u.String())
-				go handleURL(&config, conn, e, u.String())
-			}
-		}
-	})
-
-	// Add callback for PING messages
-	conn.AddCallback("PING", func(e *irc.Event) { conn.SendRaw("PONG :" + e.Message()) })
-
-	// Connect to the IRC server
-	err = conn.Connect(config.Server[0])
+	err = config.Validate()
 	if err != nil {
-		fmt.Printf("Err %s", err)
-		return
+		log.Fatalf("Invalid configuration: %s\n", err)
 	}
 
-	// Start IRC connection
-	conn.Loop()
+	var wg sync.WaitGroup
+
+	for _, network := range config.Networks {
+		wg.Add(1)
+
+		go func(network Network) {
+			defer wg.Done()
+
+			// Create new IRC connection with nickname from config
+			conn := irc.IRC(config.Nickname, config.Nickname)
+			if conn == nil {
+				log.Fatalf("Error creating IRC connection")
+				return
+			}
+
+			conn.Debug = false
+			conn.UseTLS = network.UseTLS
+			conn.TLSConfig = &tls.Config{InsecureSkipVerify: true}
+
+			// Add callback for IRC connection
+			conn.AddCallback("001", func(e *irc.Event) {
+				for _, channel := range network.Channels {
+					conn.Join(channel)
+				}
+			})
+
+			// Add callback for PRIVMSG
+			conn.AddCallback("PRIVMSG", func(e *irc.Event) {
+				words := strings.Fields(e.Message())
+				for _, word := range words {
+					u, err := url.Parse(word)
+					if err != nil {
+						log.Printf("Error parsing potential URL '%s': %s", word, err)
+					} else if u.Scheme != "" && u.Host != "" {
+						// Valid URL detected, handle accordingly
+						log.Printf("URL detected: %s", u.String())
+						go handleURL(&config, conn, e, u.String())
+					}
+				}
+			})
+
+			// Add callback for PING messages
+			conn.AddCallback("PING", func(e *irc.Event) { conn.SendRaw("PONG :" + e.Message()) })
+
+			// Connect to the IRC server
+			server := fmt.Sprintf("%s:%d", network.Server, network.Port)
+			err = conn.Connect(server)
+			if err != nil {
+				fmt.Printf("Err %s", err)
+				return
+			}
+
+			// Start IRC connection
+			conn.Loop()
+		}(network)
+	}
+
+	wg.Wait()
 }
