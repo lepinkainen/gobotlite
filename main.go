@@ -155,7 +155,7 @@ func main() {
 				return
 			}
 
-			conn.Debug = false
+			conn.Debug = true
 			conn.UseTLS = network.UseTLS
 			conn.TLSConfig = &tls.Config{InsecureSkipVerify: true}
 
