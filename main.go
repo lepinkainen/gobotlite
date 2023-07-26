@@ -1,14 +1,9 @@
 package main
 
 import (
-	"bytes"
 	"crypto/tls"
-	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
 	"log"
-	"net/http"
 	"net/url"
 	"os"
 	"strings"
@@ -25,99 +20,38 @@ type Network struct {
 	Port     int      `yaml:"port"`
 }
 
+type LambdaConfig struct {
+	Endpoint string `yaml:"endpoint"`
+	APIKey   string `yaml:"apiKey"`
+}
+
 type Config struct {
-	Networks map[string]Network `yaml:"networks"`
-	Nickname string             `yaml:"nickname"`
-	Endpoint string             `yaml:"endpoint"`
-	APIKey   string             `yaml:"apiKey"`
-}
-
-type Payload struct {
-	URL     string `json:"url"`
-	Channel string `json:"channel"`
-	User    string `json:"user"`
-}
-
-type HTTPResponse struct {
-	Title        string `json:"title"`
-	ErrorMessage string `json:"errorMessage"`
+	Networks      map[string]Network `yaml:"networks"`
+	Nickname      string             `yaml:"nickname"`
+	LambdaTitle   LambdaConfig       `yaml:"lambdatitle"`
+	LambdaCommand LambdaConfig       `yaml:"lambdacommand"`
 }
 
 func (c *Config) Validate() error {
 	if c.Nickname == "" {
-		return fmt.Errorf("Nickname is missing from configuration")
+		return fmt.Errorf("nickname is missing from configuration")
 	}
-	if c.Endpoint == "" {
-		return fmt.Errorf("Endpoint is missing from configuration")
+	if c.LambdaCommand.Endpoint == "" {
+		return fmt.Errorf("command endpoint is missing from configuration")
 	}
-	if c.APIKey == "" {
-		return fmt.Errorf("APIKey is missing from configuration")
+	if c.LambdaTitle.Endpoint == "" {
+		return fmt.Errorf("title endpoint is missing from configuration")
 	}
 	for networkName, network := range c.Networks {
 		if network.Server == "" {
-			return fmt.Errorf("Server is missing from configuration for network: %s", networkName)
+			return fmt.Errorf("server is missing from configuration for network: %s", networkName)
 		}
 		if len(network.Channels) == 0 {
-			return fmt.Errorf("No channels specified in configuration for network: %s", networkName)
+			return fmt.Errorf("no channels specified in configuration for network: %s", networkName)
 		}
 		// More specific validations can be added here, such as checking the port range, TLS config, etc.
 	}
 	return nil
-}
-
-func fetchLambdaTitle(config *Config, payload *Payload) (string, error) {
-	data, err := json.Marshal(payload)
-	if err != nil {
-		return "", err
-	}
-
-	req, err := http.NewRequest("POST", config.Endpoint, bytes.NewBuffer(data))
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-api-key", config.APIKey)
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-
-	var response HTTPResponse
-	err = json.Unmarshal(body, &response)
-	if err != nil {
-		return "", err
-	}
-
-	if response.ErrorMessage != "" {
-		return "", errors.New(response.ErrorMessage)
-	}
-
-	return response.Title, nil
-}
-
-func handleURL(config *Config, conn *irc.Connection, e *irc.Event, urlStr string) {
-	payload := &Payload{
-		URL:     urlStr,
-		Channel: e.Arguments[0],
-		User:    e.Nick,
-	}
-
-	title, err := fetchLambdaTitle(config, payload)
-	if err != nil {
-		log.Printf("Error fetching Lambda title: %s", err)
-		return
-	}
-	if title != "" {
-		conn.Privmsg(e.Arguments[0], "Title: "+title)
-	}
 }
 
 func main() {
@@ -162,15 +96,33 @@ func main() {
 			// Add callback for IRC connection
 			conn.AddCallback("001", func(e *irc.Event) {
 				for _, channel := range network.Channels {
+					// Default to #channels
+					if !strings.HasPrefix(channel, "#") {
+						channel = "#" + channel
+					}
 					conn.Join(channel)
 				}
 			})
 
 			// Add callback for PRIVMSG
 			conn.AddCallback("PRIVMSG", func(e *irc.Event) {
+				log.Printf("PRIVMSG: %s", e.Message())
+
+				// handle commands
+				if strings.HasPrefix(e.Message(), ".") {
+					go handleCommand(&config, conn, e, e.Message()[1:])
+					return
+				}
+
+				// If it wasn't a command, check if it's an URL
 				words := strings.Fields(e.Message())
 				for _, word := range words {
+					if !strings.HasPrefix(word, "http") {
+						continue
+					}
+
 					u, err := url.Parse(word)
+
 					if err != nil {
 						log.Printf("Error parsing potential URL '%s': %s", word, err)
 					} else if u.Scheme != "" && u.Host != "" {
