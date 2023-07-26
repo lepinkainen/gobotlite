@@ -77,7 +77,7 @@ func main() {
 
 	var wg sync.WaitGroup
 
-	for _, network := range config.Networks {
+	for networkName, network := range config.Networks {
 		wg.Add(1)
 
 		go func(network Network) {
@@ -90,7 +90,7 @@ func main() {
 				return
 			}
 
-			conn.Debug = true
+			conn.Debug = false
 			conn.UseTLS = network.UseTLS
 			conn.TLSConfig = &tls.Config{InsecureSkipVerify: true}
 
@@ -105,9 +105,18 @@ func main() {
 				}
 			})
 
+			conn.AddCallback("366", func(e *irc.Event) {
+				log.Printf("Joined %s on %s", e.Arguments[1], networkName)
+			})
+
 			// Add callback for PRIVMSG
 			conn.AddCallback("PRIVMSG", func(e *irc.Event) {
-				log.Printf("PRIVMSG: %s", e.Message())
+				// Ignore other bots
+				if e.Nick == "Sinkko" {
+					return
+				}
+
+				// log.Printf("PRIVMSG: %s", e.Message())
 
 				words := strings.Fields(e.Message())
 
