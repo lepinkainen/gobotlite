@@ -77,7 +77,7 @@ func main() {
 
 	var wg sync.WaitGroup
 
-	for networkName, network := range config.Networks {
+	for _, network := range config.Networks {
 		wg.Add(1)
 
 		go func(network Network) {
@@ -106,7 +106,7 @@ func main() {
 			})
 
 			conn.AddCallback("366", func(e *irc.Event) {
-				log.Printf("Joined %s on %s", e.Arguments[1], networkName)
+				log.Printf("Joined %s", e.Arguments[1])
 			})
 
 			// Add callback for PRIVMSG
