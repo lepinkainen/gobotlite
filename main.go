@@ -20,7 +20,7 @@ type Network struct {
 	Port     int      `yaml:"port"`
 }
 
-type LambdaConfig struct {
+type APIConfig struct {
 	Endpoint string `yaml:"endpoint"`
 	APIKey   string `yaml:"apiKey"`
 }
@@ -28,8 +28,9 @@ type LambdaConfig struct {
 type Config struct {
 	Networks      map[string]Network `yaml:"networks"`
 	Nickname      string             `yaml:"nickname"`
-	LambdaTitle   LambdaConfig       `yaml:"lambdatitle"`
-	LambdaCommand LambdaConfig       `yaml:"lambdacommand"`
+	LambdaTitle   APIConfig          `yaml:"lambdatitle"`
+	LambdaCommand APIConfig          `yaml:"lambdacommand"`
+	Addit         APIConfig          `yaml:"addconfig"`
 }
 
 func (c *Config) Validate() error {
@@ -108,6 +109,14 @@ func main() {
 			conn.AddCallback("PRIVMSG", func(e *irc.Event) {
 				log.Printf("PRIVMSG: %s", e.Message())
 
+				words := strings.Fields(e.Message())
+
+				// Handle rexpl as a special case
+				if words[0] == ".rexpl" {
+					go rexpl(&config, conn, e, e.Message())
+					return
+				}
+
 				// handle commands
 				if strings.HasPrefix(e.Message(), ".") {
 					go handleCommand(&config, conn, e, e.Message()[1:])
@@ -115,7 +124,6 @@ func main() {
 				}
 
 				// If it wasn't a command, check if it's an URL
-				words := strings.Fields(e.Message())
 				for _, word := range words {
 					if !strings.HasPrefix(word, "http") {
 						continue
