@@ -184,8 +184,14 @@ func main() {
 			// Add callback for PING messages
 			conn.AddCallback("PING", func(e *irc.Event) { conn.SendRaw("PONG :" + e.Message()) })
 
+			// Handle nonstandard ports
+			var port = 6667
+			if network.Port != 0 {
+				port = network.Port
+			}
+
 			// Connect to the IRC server
-			server := fmt.Sprintf("%s:%d", network.Server, network.Port)
+			server := fmt.Sprintf("%s:%d", network.Server, port)
 			err = conn.Connect(server)
 			if err != nil {
 				fmt.Printf("Err %s", err)
