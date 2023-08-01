@@ -120,6 +120,11 @@ func main() {
 
 				words := strings.Fields(e.Message())
 
+				// nothing to process
+				if len(words) == 0 {
+					return
+				}
+
 				// Handle rexpl as a special case
 				if words[0] == ".rexpl" && e.Arguments[0] == "#suomiscene" || e.Arguments[0] == "#pyfibot.test" {
 					go rexpl(&config, conn, e, e.Message())
