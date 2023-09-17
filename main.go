@@ -126,13 +126,13 @@ func main() {
 				}
 
 				// Handle rexpl as a special case
-				if words[0] == ".rexpl" && e.Arguments[0] == "#suomiscene" || e.Arguments[0] == "#pyfibot.test" {
+				if words[0] == ".rexpl" && (e.Arguments[0] == "#suomiscene" || e.Arguments[0] == "#pyfibot.test") {
 					go rexpl(&config, conn, e, e.Message())
 					return
 				}
 
-				// handle commands
-				if strings.HasPrefix(e.Message(), ".") {
+				// handle commands, command needs to be at least one character past prefix
+				if strings.HasPrefix(e.Message(), ".") && len(e.Message()) > 1 {
 					go handleCommand(&config, conn, e, e.Message()[1:])
 					return
 				}

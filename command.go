@@ -73,8 +73,18 @@ func fetchLambdaCommand(config *Config, payload *CommandPayload) (string, error)
 }
 
 func handleCommand(config *Config, conn *irc.Connection, e *irc.Event, commandStr string) {
-	var args = strings.Fields(commandStr)[1:]
-	var command = strings.Fields(commandStr)[:1]
+
+	var command []string
+	var args []string
+
+	// Don't break if there's not enough to split
+	fields := strings.Fields(commandStr)
+	if len(fields) > 1 {
+		args = fields[1:]
+		command = fields[:1]
+	} else {
+		command = fields[:1]
+	}
 
 	payload := &CommandPayload{
 		Command: strings.Join(command, " "),
