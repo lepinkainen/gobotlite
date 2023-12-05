@@ -22,6 +22,7 @@ type TitleResponse struct {
 	ErrorMessage string `json:"errorMessage"`
 }
 
+// fetchLambdaTitle fetches the title using a Lambda function.
 func fetchLambdaTitle(config *Config, payload *TitlePayload) (string, error) {
 	data, err := json.Marshal(payload)
 	if err != nil {
@@ -60,6 +61,7 @@ func fetchLambdaTitle(config *Config, payload *TitlePayload) (string, error) {
 	return response.Title, nil
 }
 
+// handleURL handles the URL received in the IRC event.
 func handleURL(config *Config, conn *irc.Connection, e *irc.Event, urlStr string) {
 	payload := &TitlePayload{
 		URL:     urlStr,

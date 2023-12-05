@@ -111,6 +111,7 @@ func main() {
 
 			// Add callback for PRIVMSG
 			conn.AddCallback("PRIVMSG", func(e *irc.Event) {
+				var channel = e.Arguments[0]
 				// Ignore other bots
 				if e.Nick == "Sinkko" {
 					return
@@ -126,10 +127,12 @@ func main() {
 				}
 
 				// Handle rexpl as a special case
-				if words[0] == ".rexpl" && (e.Arguments[0] == "#suomiscene" || e.Arguments[0] == "#pyfibot.test") {
-					go rexpl(&config, conn, e, e.Message())
-					return
-				}
+				/*
+					if words[0] == ".rexpl" && (e.Arguments[0] == "#suomiscene" || e.Arguments[0] == "#pyfibot.test") {
+						go rexpl(&config, conn, e, e.Message())
+						return
+					}
+				*/
 
 				// handle commands, command needs to be at least one character past prefix
 				if strings.HasPrefix(e.Message(), ".") && len(e.Message()) > 1 {
@@ -149,7 +152,7 @@ func main() {
 						log.Printf("Error parsing potential URL '%s': %s", word, err)
 					} else if u.Scheme != "" && u.Host != "" {
 						// Valid URL detected, handle accordingly
-						log.Printf("URL detected: %s", u.String())
+						log.Printf("URL detected on %s: %s", channel, u.String())
 						go handleURL(&config, conn, e, u.String())
 					}
 				}
