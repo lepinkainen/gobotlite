@@ -33,6 +33,8 @@ type Config struct {
 	Addit         APIConfig          `yaml:"addconfig"`
 }
 
+var Version = "development"
+
 func (c *Config) Validate() error {
 	if c.Nickname == "" {
 		return fmt.Errorf("nickname is missing from configuration")
@@ -57,6 +59,8 @@ func (c *Config) Validate() error {
 
 func main() {
 	config := Config{}
+
+	log.Printf("Starting bot version %s", Version)
 
 	// Read the YAML configuration file
 	data, err := os.ReadFile("config.yaml")
@@ -126,16 +130,9 @@ func main() {
 					return
 				}
 
-				// Handle rexpl as a special case
-				/*
-					if words[0] == ".rexpl" && (e.Arguments[0] == "#suomiscene" || e.Arguments[0] == "#pyfibot.test") {
-						go rexpl(&config, conn, e, e.Message())
-						return
-					}
-				*/
-
 				// handle commands, command needs to be at least one character past prefix
 				if strings.HasPrefix(e.Message(), ".") && len(e.Message()) > 1 {
+					//nolint:errcheck
 					go handleCommand(&config, conn, e, e.Message()[1:])
 					return
 				}
@@ -151,9 +148,16 @@ func main() {
 					if err != nil {
 						log.Printf("Error parsing potential URL '%s': %s", word, err)
 					} else if u.Scheme != "" && u.Host != "" {
-						// Valid URL detected, handle accordingly
-						log.Printf("URL detected on %s: %s", channel, u.String())
-						go handleURL(&config, conn, e, u.String())
+						// ignore if prefixed with *
+						// matrix bridges do this when linking to Discord and it's annoying AF
+						if strings.HasPrefix(e.Message(), "*") {
+							log.Printf("Ignoring URL: %s", u.String())
+
+						} else {
+							// Valid URL detected, handle accordingly
+							log.Printf("URL detected on %s: %s", channel, u.String())
+							go handleURL(&config, conn, e, u.String())
+						}
 					}
 				}
 			})

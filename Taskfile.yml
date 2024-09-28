@@ -1,0 +1,46 @@
+version: "3"
+
+vars:
+  FUNCNAME: gobotlite
+  BUILDDIR: build
+
+dotenv: [".env", "{{.ENV}}/.env.", "{{.HOME}}/.env"]
+
+tasks:
+  default:
+    desc: Default task, runs build
+    cmds:
+      - task: build
+
+  build:
+    desc: Build the Go application
+    deps:
+      - task: test
+    cmds:
+      - env GOOS=linux GOARCH=amd64 go build -ldflags="-X main.Version={{.GIT_COMMIT}}" -o {{.BUILDDIR}}/{{.FUNCNAME}}
+    generates:
+      - "{{.BUILDDIR}}/{{.FUNCNAME}}"
+    vars:
+      GIT_COMMIT:
+        sh: git log -n 1 --format=%h
+
+  test:
+    desc: Run Go tests
+    cmds:
+      - go test -v ./...
+
+  lint:
+    desc: Run Go linters
+    cmds:
+      - golangci-lint run ./...
+    silent: true # to ignore errors but keep the output
+
+  publish:
+    desc: Build and publish the Go binary to remote server
+    deps:
+      - task: test
+      - task: lint
+      - task: build
+    cmds:
+      - echo "Deploying to {{.DESTINATION}}..."
+      - scp build/{{.FUNCNAME}} {{.DESTINATION}}
