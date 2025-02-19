@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	irc "github.com/thoj/go-ircevent"
 	"gopkg.in/yaml.v2"
@@ -31,6 +32,18 @@ type Config struct {
 	LambdaTitle   APIConfig          `yaml:"lambdatitle"`
 	LambdaCommand APIConfig          `yaml:"lambdacommand"`
 	Addit         APIConfig          `yaml:"addconfig"`
+	Security      struct {
+		AllowInsecureTLS bool `yaml:"allowInsecureTLS"`
+		RateLimit        struct {
+			Enabled bool `yaml:"enabled"`
+			Rate    int  `yaml:"rate"`
+			Burst   int  `yaml:"burst"`
+		} `yaml:"rateLimit"`
+	} `yaml:"security"`
+	Logging struct {
+		Level  string `yaml:"level"`
+		Format string `yaml:"format"`
+	} `yaml:"logging"`
 }
 
 var Version = "development"
@@ -55,6 +68,26 @@ func (c *Config) Validate() error {
 		// More specific validations can be added here, such as checking the port range, TLS config, etc.
 	}
 	return nil
+}
+
+func connectWithRetry(conn *irc.Connection, server string) error {
+	backoff := time.Second
+	maxBackoff := time.Minute * 5
+
+	for {
+		err := conn.Connect(server)
+		if err == nil {
+			return nil
+		}
+
+		log.Printf("Connection failed: %v, retrying in %v", err, backoff)
+		time.Sleep(backoff)
+
+		backoff *= 2
+		if backoff > maxBackoff {
+			backoff = maxBackoff
+		}
+	}
 }
 
 func main() {
@@ -111,6 +144,40 @@ func main() {
 
 			conn.AddCallback("366", func(e *irc.Event) {
 				log.Printf("Joined %s", e.Arguments[1])
+			})
+
+			conn.AddCallback("433", func(e *irc.Event) {
+				log.Printf("Nickname is already in use")
+				conn.Nick(config.Nickname + "_")
+			})
+
+			// Handle CTCP VERSION
+			conn.AddCallback("CTCP_VERSION", func(e *irc.Event) {
+				conn.SendRawf("NOTICE %s :\x01VERSION gobotlite - https://github.com/lepinkainen/gobotlite\x01", e.Nick)
+			})
+
+			// Handle CTCP TIME
+			conn.AddCallback("CTCP_TIME", func(e *irc.Event) {
+				conn.SendRawf("NOTICE %s :\x01TIME %s\x01", e.Nick, time.Now().Format(time.RFC1123))
+			})
+
+			// Handle CTCP PING
+			conn.AddCallback("CTCP_PING", func(e *irc.Event) {
+				conn.SendRawf("NOTICE %s :\x01PING %s\x01", e.Nick, e.Arguments[1])
+			})
+
+			// Handle kicks
+			conn.AddCallback("KICK", func(e *irc.Event) {
+				if e.Arguments[1] == config.Nickname {
+					log.Printf("Kicked from %s by %s, rejoining...", e.Arguments[0], e.Nick)
+					conn.Join(e.Arguments[0])
+				}
+			})
+
+			// Handle invites
+			conn.AddCallback("INVITE", func(e *irc.Event) {
+				log.Printf("Invited to %s by %s", e.Arguments[1], e.Nick)
+				//conn.Join(e.Arguments[1])
 			})
 
 			// Add callback for PRIVMSG
@@ -173,7 +240,7 @@ func main() {
 
 			// Connect to the IRC server
 			server := fmt.Sprintf("%s:%d", network.Server, port)
-			err = conn.Connect(server)
+			err = connectWithRetry(conn, server)
 			if err != nil {
 				fmt.Printf("Err %s", err)
 				return
