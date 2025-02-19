@@ -1,3 +1,7 @@
 config.yaml
 gobotlite
 .env
+coverage/
+build/
+.task/
+.vscode/settings.json

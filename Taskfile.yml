@@ -3,8 +3,13 @@ version: "3"
 vars:
   FUNCNAME: gobotlite
   BUILDDIR: build
+  COVERAGE_DIR: coverage
+  BINARY: "{{.BUILDDIR}}/{{.FUNCNAME}}"
 
-dotenv: [".env", "{{.ENV}}/.env.", "{{.HOME}}/.env"]
+dotenv:
+  - .env
+  - "{{.ENV}}/.env."
+  - "{{.HOME}}/.env"
 
 tasks:
   default:
@@ -15,32 +20,68 @@ tasks:
   build:
     desc: Build the Go application
     deps:
-      - task: test
+      - test
+      - clean
     cmds:
-      - env GOOS=linux GOARCH=amd64 go build -ldflags="-X main.Version={{.GIT_COMMIT}}" -o {{.BUILDDIR}}/{{.FUNCNAME}}
+      - mkdir -p {{.BUILDDIR}}
+      - >
+        env GOOS=linux GOARCH=amd64 go build 
+        -ldflags="-X main.Version={{.GIT_COMMIT}} -w -s" 
+        -o {{.BINARY}}
     generates:
-      - "{{.BUILDDIR}}/{{.FUNCNAME}}"
+      - "{{.BINARY}}"
     vars:
       GIT_COMMIT:
-        sh: git log -n 1 --format=%h
+        sh: git rev-parse --short HEAD
 
   test:
-    desc: Run Go tests
+    desc: Run Go tests with coverage
     cmds:
-      - go test -v ./...
+      - mkdir -p {{.COVERAGE_DIR}}
+      - go test -v -race -coverprofile={{.COVERAGE_DIR}}/coverage.out ./...
+      - go tool cover -html={{.COVERAGE_DIR}}/coverage.out -o {{.COVERAGE_DIR}}/coverage.html
+    sources:
+      - ./**/*.go
+    generates:
+      - "{{.COVERAGE_DIR}}/coverage.out"
+      - "{{.COVERAGE_DIR}}/coverage.html"
 
   lint:
     desc: Run Go linters
     cmds:
       - golangci-lint run ./...
-    silent: true # to ignore errors but keep the output
+    sources:
+      - ./**/*.go
+    silent: true
+
+  clean:
+    desc: Clean build artifacts
+    cmds:
+      - rm -rf {{.BUILDDIR}} {{.COVERAGE_DIR}}
 
   publish:
     desc: Build and publish the Go binary to remote server
     deps:
-      - task: test
-      - task: lint
-      - task: build
+      - test
+      - lint
+      - build
     cmds:
       - echo "Deploying to {{.DESTINATION}}..."
-      - scp build/{{.FUNCNAME}} {{.DESTINATION}}
+      - scp {{.BINARY}} {{.DESTINATION}}
+    preconditions:
+      - sh: "[ ! -z '{{.DESTINATION}}' ]"
+        msg: "DESTINATION variable is required"
+
+  upgrade-deps:
+    desc: Upgrade all dependencies to their latest versions
+    silent: true
+    cmds:
+      - go get -u ./...
+      - go mod tidy
+      - echo "✅ Dependencies upgraded successfully"
+    sources:
+      - go.mod
+      - go.sum
+    generates:
+      - go.mod
+      - go.sum
