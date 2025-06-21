@@ -25,6 +25,23 @@ tasks:
     cmds:
       - mkdir -p {{.BUILDDIR}}
       - >
+        go build 
+        -ldflags="-X main.Version={{.GIT_COMMIT}} -w -s" 
+        -o {{.BINARY}}
+    generates:
+      - "{{.BINARY}}"
+    vars:
+      GIT_COMMIT:
+        sh: git rev-parse --short HEAD
+
+  build-linux:
+    desc: Build the Go application
+    deps:
+      - test
+      - clean
+    cmds:
+      - mkdir -p {{.BUILDDIR}}
+      - >
         env GOOS=linux GOARCH=amd64 go build 
         -ldflags="-X main.Version={{.GIT_COMMIT}} -w -s" 
         -o {{.BINARY}}
