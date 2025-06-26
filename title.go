@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 
 	irc "github.com/thoj/go-ircevent"
@@ -41,7 +41,11 @@ func fetchLambdaTitle(config *Config, payload *TitlePayload) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			slog.Error("Failed to close response body", "error", err)
+		}
+	}()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -71,7 +75,7 @@ func handleURL(config *Config, conn *irc.Connection, e *irc.Event, urlStr string
 
 	title, err := fetchLambdaTitle(config, payload)
 	if err != nil {
-		log.Printf("Error fetching Lambda title: %s", err)
+		slog.Error("Error fetching Lambda title", "error", err, "url", urlStr)
 		return
 	}
 	if title != "" {

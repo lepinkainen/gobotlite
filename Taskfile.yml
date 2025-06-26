@@ -51,6 +51,23 @@ tasks:
       GIT_COMMIT:
         sh: git rev-parse --short HEAD
 
+  build-ci:
+    desc: Build the Go application for CI environments
+    deps:
+      - test-ci
+      - lint
+    cmds:
+      - mkdir -p {{.BUILDDIR}}
+      - >
+        go build 
+        -ldflags="-X main.Version={{.GIT_COMMIT}} -w -s" 
+        -o {{.BINARY}}
+    generates:
+      - "{{.BINARY}}"
+    vars:
+      GIT_COMMIT:
+        sh: git rev-parse --short HEAD
+
   test:
     desc: Run Go tests with coverage
     cmds:
@@ -62,6 +79,13 @@ tasks:
     generates:
       - "{{.COVERAGE_DIR}}/coverage.out"
       - "{{.COVERAGE_DIR}}/coverage.html"
+
+  test-ci:
+    desc: Run Go tests for CI environments
+    cmds:
+      - go test -tags=ci -cover -v ./...
+    sources:
+      - ./**/*.go
 
   lint:
     desc: Run Go linters

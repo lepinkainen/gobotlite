@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -32,7 +33,7 @@ func fetchLambdaCommand(config *Config, payload *CommandPayload) (string, error)
 		return "", err
 	}
 
-	fmt.Printf("Calling lambda command with payload %s\n", data)
+	slog.Debug("Calling lambda command", "payload", string(data))
 
 	// Construct the HTTP request
 	req, err := http.NewRequest("POST", config.LambdaCommand.Endpoint, bytes.NewBuffer(data))
@@ -47,7 +48,11 @@ func fetchLambdaCommand(config *Config, payload *CommandPayload) (string, error)
 	if err != nil {
 		return "", fmt.Errorf("error doing request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			slog.Error("Failed to close response body", "error", err)
+		}
+	}()
 
 	// Read the response body
 	body, err := io.ReadAll(resp.Body)

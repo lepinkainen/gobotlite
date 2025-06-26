@@ -25,6 +25,7 @@ gobotlite is a lightweight IRC bot written in Go that acts as a shim layer, dele
 ### Configuration Structure
 
 The bot is configured via `config.yaml` with the following key sections:
+
 - `networks`: Map of network configurations (server, channels, TLS, port)
 - `nickname`: IRC nickname to use across all networks
 - `lambdatitle`: Lambda endpoint for URL title parsing
@@ -61,6 +62,12 @@ task publish
 
 # Upgrade dependencies
 task upgrade-deps
+
+# Build for CI environments
+task build-ci
+
+# Run tests for CI environments
+task test-ci
 ```
 
 ### Go Commands
@@ -93,23 +100,27 @@ go mod tidy
 ## Dependencies
 
 - **github.com/thoj/go-ircevent**: IRC client library
-- **gopkg.in/yaml.v2**: YAML configuration parsing
-- Standard Go libraries for HTTP, TLS, and concurrency
+- **github.com/spf13/viper**: Configuration management
+- Standard Go libraries for HTTP, TLS, concurrency, and structured logging (log/slog)
 
 ## Configuration Notes
 
 - The bot expects `config.yaml` in the working directory
+- Configuration is loaded using Viper for flexible config management
 - API keys for Lambda functions are stored in the configuration file
 - TLS is configured per network with InsecureSkipVerify enabled
 - Channels are auto-prefixed with `#` if not present
 - Default IRC port is 6667, override with `port` in network config
+- Structured logging using log/slog for better observability
 
 ## Lambda Integration
 
 The bot sends structured JSON payloads to Lambda functions:
+
 - **Commands**: `{command, args, channel, user}`
 - **URLs**: `{url, channel, user}`
 
 Responses are expected in format:
+
 - **Commands**: `{result, errorMessage}`
 - **URLs**: `{title, errorMessage}`

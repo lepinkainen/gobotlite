@@ -3,15 +3,15 @@ package main
 import (
 	"crypto/tls"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/url"
 	"os"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/spf13/viper"
 	irc "github.com/thoj/go-ircevent"
-	"gopkg.in/yaml.v2"
 )
 
 type Network struct {
@@ -80,7 +80,7 @@ func connectWithRetry(conn *irc.Connection, server string) error {
 			return nil
 		}
 
-		log.Printf("Connection failed: %v, retrying in %v", err, backoff)
+		slog.Warn("Connection failed, retrying", "error", err, "backoff", backoff)
 		time.Sleep(backoff)
 
 		backoff *= 2
@@ -93,23 +93,31 @@ func connectWithRetry(conn *irc.Connection, server string) error {
 func main() {
 	config := Config{}
 
-	log.Printf("Starting bot version %s", Version)
+	slog.Info("Starting bot", "version", Version)
 
-	// Read the YAML configuration file
-	data, err := os.ReadFile("config.yaml")
+	// Configure Viper
+	viper.SetConfigName("config")
+	viper.SetConfigType("yaml")
+	viper.AddConfigPath(".")
+
+	// Read configuration
+	err := viper.ReadInConfig()
 	if err != nil {
-		log.Fatalf("Error reading YAML file: %s\n", err)
+		slog.Error("Error reading config file", "error", err)
+		os.Exit(1)
 	}
 
-	// Unmarshal the YAML data into the Config struct
-	err = yaml.Unmarshal([]byte(data), &config)
+	// Unmarshal the configuration into the Config struct
+	err = viper.Unmarshal(&config)
 	if err != nil {
-		log.Fatalf("Error parsing YAML file: %s\n", err)
+		slog.Error("Error parsing config file", "error", err)
+		os.Exit(1)
 	}
 
 	err = config.Validate()
 	if err != nil {
-		log.Fatalf("Invalid configuration: %s\n", err)
+		slog.Error("Invalid configuration", "error", err)
+		os.Exit(1)
 	}
 
 	var wg sync.WaitGroup
@@ -123,7 +131,7 @@ func main() {
 			// Create new IRC connection with nickname from config
 			conn := irc.IRC(config.Nickname, config.Nickname)
 			if conn == nil {
-				log.Fatalf("Error creating IRC connection")
+				slog.Error("Error creating IRC connection")
 				return
 			}
 
@@ -143,11 +151,11 @@ func main() {
 			})
 
 			conn.AddCallback("366", func(e *irc.Event) {
-				log.Printf("Joined %s", e.Arguments[1])
+				slog.Info("Joined channel", "channel", e.Arguments[1])
 			})
 
 			conn.AddCallback("433", func(e *irc.Event) {
-				log.Printf("Nickname is already in use")
+				slog.Warn("Nickname is already in use")
 				conn.Nick(config.Nickname + "_")
 			})
 
@@ -169,14 +177,14 @@ func main() {
 			// Handle kicks
 			conn.AddCallback("KICK", func(e *irc.Event) {
 				if e.Arguments[1] == config.Nickname {
-					log.Printf("Kicked from %s by %s, rejoining...", e.Arguments[0], e.Nick)
+					slog.Info("Kicked from channel, rejoining", "channel", e.Arguments[0], "kicked_by", e.Nick)
 					conn.Join(e.Arguments[0])
 				}
 			})
 
 			// Handle invites
 			conn.AddCallback("INVITE", func(e *irc.Event) {
-				log.Printf("Invited to %s by %s", e.Arguments[1], e.Nick)
+				slog.Info("Invited to channel", "channel", e.Arguments[1], "invited_by", e.Nick)
 				//conn.Join(e.Arguments[1])
 			})
 
@@ -188,7 +196,7 @@ func main() {
 					return
 				}
 
-				// log.Printf("PRIVMSG: %s", e.Message())
+				// slog.Debug("PRIVMSG received", "message", e.Message())
 
 				words := strings.Fields(e.Message())
 
@@ -213,16 +221,16 @@ func main() {
 					u, err := url.Parse(word)
 
 					if err != nil {
-						log.Printf("Error parsing potential URL '%s': %s", word, err)
+						slog.Debug("Error parsing potential URL", "url", word, "error", err)
 					} else if u.Scheme != "" && u.Host != "" {
 						// ignore if prefixed with *
 						// matrix bridges do this when linking to Discord and it's annoying AF
 						if strings.HasPrefix(e.Message(), "*") {
-							log.Printf("Ignoring URL: %s", u.String())
+							slog.Debug("Ignoring URL", "url", u.String())
 
 						} else {
 							// Valid URL detected, handle accordingly
-							log.Printf("URL detected on %s: %s", channel, u.String())
+							slog.Info("URL detected", "channel", channel, "url", u.String())
 							go handleURL(&config, conn, e, u.String())
 						}
 					}
