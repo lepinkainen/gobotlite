@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"strings"
 
-	irc "github.com/thoj/go-ircevent"
+	irc "github.com/fluffle/goirc/client"
 )
 
 type CommandPayload struct {
@@ -78,7 +78,7 @@ func fetchLambdaCommand(config *Config, payload *CommandPayload) (string, error)
 
 // handleCommand handles an IRC command by sending it to a Lambda function for processing and sending the response back to the IRC connection.
 // It takes in a `Config` struct pointer, an IRC connection pointer, an IRC event pointer, and a string representing the command as arguments.
-func handleCommand(config *Config, conn *irc.Connection, e *irc.Event, commandStr string) error {
+func handleCommand(config *Config, conn *irc.Conn, line *irc.Line, commandStr string) error {
 	// Validate input
 	if commandStr == "" {
 		return errors.New("empty command string")
@@ -91,8 +91,8 @@ func handleCommand(config *Config, conn *irc.Connection, e *irc.Event, commandSt
 	payload := &CommandPayload{
 		Command: strings.Join(command, " "),
 		Args:    strings.Join(args, " "),
-		Channel: e.Arguments[0],
-		User:    e.Source,
+		Channel: line.Args[0],
+		User:    line.Src,
 	}
 
 	// Call the fetchLambdaCommand function to send the payload to the Lambda function and get the response
@@ -103,7 +103,7 @@ func handleCommand(config *Config, conn *irc.Connection, e *irc.Event, commandSt
 
 	if response != "" {
 		// Send the response back to the IRC connection
-		conn.Privmsg(e.Arguments[0], response)
+		conn.Privmsg(line.Args[0], response)
 	}
 
 	return nil

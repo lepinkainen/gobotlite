@@ -8,7 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	irc "github.com/thoj/go-ircevent"
+	irc "github.com/fluffle/goirc/client"
 )
 
 type TitlePayload struct {
@@ -66,11 +66,11 @@ func fetchLambdaTitle(config *Config, payload *TitlePayload) (string, error) {
 }
 
 // handleURL handles the URL received in the IRC event.
-func handleURL(config *Config, conn *irc.Connection, e *irc.Event, urlStr string) {
+func handleURL(config *Config, conn *irc.Conn, line *irc.Line, urlStr string) {
 	payload := &TitlePayload{
 		URL:     urlStr,
-		Channel: e.Arguments[0],
-		User:    e.Source,
+		Channel: line.Args[0],
+		User:    line.Src,
 	}
 
 	title, err := fetchLambdaTitle(config, payload)
@@ -79,6 +79,6 @@ func handleURL(config *Config, conn *irc.Connection, e *irc.Event, urlStr string
 		return
 	}
 	if title != "" {
-		conn.Privmsg(e.Arguments[0], "Title: "+title)
+		conn.Privmsg(line.Args[0], "Title: "+title)
 	}
 }

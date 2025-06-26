@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/spf13/viper"
-	irc "github.com/thoj/go-ircevent"
+	irc "github.com/fluffle/goirc/client"
 )
 
 type Network struct {
@@ -70,12 +70,12 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-func connectWithRetry(conn *irc.Connection, server string) error {
+func connectWithRetry(conn *irc.Conn, server string) error {
 	backoff := time.Second
 	maxBackoff := time.Minute * 5
 
 	for {
-		err := conn.Connect(server)
+		err := conn.ConnectTo(server)
 		if err == nil {
 			return nil
 		}
@@ -129,18 +129,13 @@ func main() {
 			defer wg.Done()
 
 			// Create new IRC connection with nickname from config
-			conn := irc.IRC(config.Nickname, config.Nickname)
-			if conn == nil {
-				slog.Error("Error creating IRC connection")
-				return
-			}
-
-			conn.Debug = false
-			conn.UseTLS = network.UseTLS
-			conn.TLSConfig = &tls.Config{InsecureSkipVerify: true}
+			cfg := irc.NewConfig(config.Nickname)
+			cfg.SSL = network.UseTLS
+			cfg.SSLConfig = &tls.Config{InsecureSkipVerify: true}
+			conn := irc.Client(cfg)
 
 			// Add callback for IRC connection
-			conn.AddCallback("001", func(e *irc.Event) {
+			conn.HandleFunc(irc.CONNECTED, func(conn *irc.Conn, line *irc.Line) {
 				for _, channel := range network.Channels {
 					// Default to #channels
 					if !strings.HasPrefix(channel, "#") {
@@ -150,55 +145,55 @@ func main() {
 				}
 			})
 
-			conn.AddCallback("366", func(e *irc.Event) {
-				slog.Info("Joined channel", "channel", e.Arguments[1])
+			conn.HandleFunc("366", func(conn *irc.Conn, line *irc.Line) {
+				slog.Info("Joined channel", "channel", line.Args[1])
 			})
 
-			conn.AddCallback("433", func(e *irc.Event) {
+			conn.HandleFunc("433", func(conn *irc.Conn, line *irc.Line) {
 				slog.Warn("Nickname is already in use")
 				conn.Nick(config.Nickname + "_")
 			})
 
 			// Handle CTCP VERSION
-			conn.AddCallback("CTCP_VERSION", func(e *irc.Event) {
-				conn.SendRawf("NOTICE %s :\x01VERSION gobotlite - https://github.com/lepinkainen/gobotlite\x01", e.Nick)
+			conn.HandleFunc("CTCP_VERSION", func(conn *irc.Conn, line *irc.Line) {
+				conn.Notice(line.Nick, "\x01VERSION gobotlite - https://github.com/lepinkainen/gobotlite\x01")
 			})
 
 			// Handle CTCP TIME
-			conn.AddCallback("CTCP_TIME", func(e *irc.Event) {
-				conn.SendRawf("NOTICE %s :\x01TIME %s\x01", e.Nick, time.Now().Format(time.RFC1123))
+			conn.HandleFunc("CTCP_TIME", func(conn *irc.Conn, line *irc.Line) {
+				conn.Notice(line.Nick, "\x01TIME "+time.Now().Format(time.RFC1123)+"\x01")
 			})
 
 			// Handle CTCP PING
-			conn.AddCallback("CTCP_PING", func(e *irc.Event) {
-				conn.SendRawf("NOTICE %s :\x01PING %s\x01", e.Nick, e.Arguments[1])
+			conn.HandleFunc("CTCP_PING", func(conn *irc.Conn, line *irc.Line) {
+				conn.Notice(line.Nick, "\x01PING "+line.Args[1]+"\x01")
 			})
 
 			// Handle kicks
-			conn.AddCallback("KICK", func(e *irc.Event) {
-				if e.Arguments[1] == config.Nickname {
-					slog.Info("Kicked from channel, rejoining", "channel", e.Arguments[0], "kicked_by", e.Nick)
-					conn.Join(e.Arguments[0])
+			conn.HandleFunc("KICK", func(conn *irc.Conn, line *irc.Line) {
+				if line.Args[1] == config.Nickname {
+					slog.Info("Kicked from channel, rejoining", "channel", line.Args[0], "kicked_by", line.Nick)
+					conn.Join(line.Args[0])
 				}
 			})
 
 			// Handle invites
-			conn.AddCallback("INVITE", func(e *irc.Event) {
-				slog.Info("Invited to channel", "channel", e.Arguments[1], "invited_by", e.Nick)
-				//conn.Join(e.Arguments[1])
+			conn.HandleFunc("INVITE", func(conn *irc.Conn, line *irc.Line) {
+				slog.Info("Invited to channel", "channel", line.Args[1], "invited_by", line.Nick)
+				//conn.Join(line.Args[1])
 			})
 
 			// Add callback for PRIVMSG
-			conn.AddCallback("PRIVMSG", func(e *irc.Event) {
-				var channel = e.Arguments[0]
+			conn.HandleFunc("PRIVMSG", func(conn *irc.Conn, line *irc.Line) {
+				var channel = line.Args[0]
 				// Ignore other bots
-				if e.Nick == "Sinkko" {
+				if line.Nick == "Sinkko" {
 					return
 				}
 
-				// slog.Debug("PRIVMSG received", "message", e.Message())
+				// slog.Debug("PRIVMSG received", "message", line.Text())
 
-				words := strings.Fields(e.Message())
+				words := strings.Fields(line.Text())
 
 				// nothing to process
 				if len(words) == 0 {
@@ -206,9 +201,9 @@ func main() {
 				}
 
 				// handle commands, command needs to be at least one character past prefix
-				if strings.HasPrefix(e.Message(), ".") && len(e.Message()) > 1 {
+				if strings.HasPrefix(line.Text(), ".") && len(line.Text()) > 1 {
 					//nolint:errcheck
-					go handleCommand(&config, conn, e, e.Message()[1:])
+					go handleCommand(&config, conn, line, line.Text()[1:])
 					return
 				}
 
@@ -225,20 +220,20 @@ func main() {
 					} else if u.Scheme != "" && u.Host != "" {
 						// ignore if prefixed with *
 						// matrix bridges do this when linking to Discord and it's annoying AF
-						if strings.HasPrefix(e.Message(), "*") {
+						if strings.HasPrefix(line.Text(), "*") {
 							slog.Debug("Ignoring URL", "url", u.String())
 
 						} else {
 							// Valid URL detected, handle accordingly
 							slog.Info("URL detected", "channel", channel, "url", u.String())
-							go handleURL(&config, conn, e, u.String())
+							go handleURL(&config, conn, line, u.String())
 						}
 					}
 				}
 			})
 
 			// Add callback for PING messages
-			conn.AddCallback("PING", func(e *irc.Event) { conn.SendRaw("PONG :" + e.Message()) })
+			conn.HandleFunc("PING", func(conn *irc.Conn, line *irc.Line) { conn.Raw("PONG :" + line.Text()) })
 
 			// Handle nonstandard ports
 			var port = 6667
@@ -254,8 +249,7 @@ func main() {
 				return
 			}
 
-			// Start IRC connection
-			conn.Loop()
+			// Start IRC connection - fluffle/goirc doesn't have Loop(), connection is handled automatically
 		}(network)
 	}
 

@@ -3,13 +3,15 @@ module github.com/lepinkainen/gobotlite
 go 1.24
 
 require (
+	github.com/fluffle/goirc v1.3.0
 	github.com/spf13/viper v1.20.1
-	github.com/thoj/go-ircevent v0.0.0-20210723090443-73e444401d64
 )
 
 require (
+	github.com/emersion/go-sasl v0.0.0-20220912192320-0145f2c60ead // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/go-viper/mapstructure/v2 v2.3.0 // indirect
+	github.com/golang/mock v1.5.0 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/sagikazarmark/locafero v0.9.0 // indirect
 	github.com/sourcegraph/conc v0.3.0 // indirect
