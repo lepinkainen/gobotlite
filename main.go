@@ -136,9 +136,10 @@ func main() {
 
 			// Signal when the connection drops so the goroutine can exit
 			quit := make(chan struct{})
+			var quitOnce sync.Once
 			conn.HandleFunc(irc.DISCONNECTED, func(conn *irc.Conn, line *irc.Line) {
 				slog.Warn("Disconnected from server", "server", network.Server)
-				close(quit)
+				quitOnce.Do(func() { close(quit) })
 			})
 
 			// Add callback for IRC connection
