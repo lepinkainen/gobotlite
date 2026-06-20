@@ -173,6 +173,9 @@ func main() {
 
 			// Handle CTCP PING
 			conn.HandleFunc("CTCP_PING", func(conn *irc.Conn, line *irc.Line) {
+				if len(line.Args) < 2 {
+					return
+				}
 				conn.Notice(line.Nick, "\x01PING "+line.Args[1]+"\x01")
 			})
 
