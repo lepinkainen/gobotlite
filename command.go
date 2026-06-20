@@ -86,6 +86,9 @@ func handleCommand(config *Config, conn *irc.Conn, line *irc.Line, commandStr st
 
 	// Split command string into command and arguments
 	command, args := splitCommandString(commandStr)
+	if len(command) == 0 {
+		return errors.New("empty command string")
+	}
 
 	// Create a CommandPayload struct with the command, arguments, channel, and user information
 	payload := &CommandPayload{
@@ -112,6 +115,9 @@ func handleCommand(config *Config, conn *irc.Conn, line *irc.Line, commandStr st
 // splitCommandString splits a command string into command and arguments.
 func splitCommandString(commandStr string) ([]string, []string) {
 	fields := strings.Fields(commandStr)
+	if len(fields) == 0 {
+		return nil, nil
+	}
 	if len(fields) > 1 {
 		return fields[:1], fields[1:]
 	}
