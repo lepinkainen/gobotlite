@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	irc "github.com/fluffle/goirc/client"
 )
@@ -43,7 +44,7 @@ func fetchLambdaCommand(config *Config, payload *CommandPayload) (string, error)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("x-api-key", config.LambdaCommand.APIKey)
 
-	client := &http.Client{}
+	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("error doing request: %w", err)

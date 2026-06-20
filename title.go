@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"time"
 
 	irc "github.com/fluffle/goirc/client"
 )
@@ -36,7 +37,7 @@ func fetchLambdaTitle(config *Config, payload *TitlePayload) (string, error) {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("x-api-key", config.LambdaTitle.APIKey)
 
-	client := &http.Client{}
+	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", err
