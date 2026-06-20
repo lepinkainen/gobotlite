@@ -134,6 +134,13 @@ func main() {
 			cfg.SSLConfig = &tls.Config{InsecureSkipVerify: true}
 			conn := irc.Client(cfg)
 
+			// Signal when the connection drops so the goroutine can exit
+			quit := make(chan struct{})
+			conn.HandleFunc(irc.DISCONNECTED, func(conn *irc.Conn, line *irc.Line) {
+				slog.Warn("Disconnected from server", "server", network.Server)
+				close(quit)
+			})
+
 			// Add callback for IRC connection
 			conn.HandleFunc(irc.CONNECTED, func(conn *irc.Conn, line *irc.Line) {
 				for _, channel := range network.Channels {
@@ -249,7 +256,8 @@ func main() {
 				return
 			}
 
-			// Start IRC connection - fluffle/goirc doesn't have Loop(), connection is handled automatically
+			// fluffle/goirc connects in background goroutines; block until disconnect
+			<-quit
 		}(network)
 	}
 
