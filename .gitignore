@@ -5,3 +5,5 @@ coverage/
 build/
 .task/
 .vscode/settings.json
+
+dist/

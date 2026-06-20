@@ -19,7 +19,7 @@ gobotlite is a lightweight IRC bot written in Go that acts as a shim layer, dele
 
 - **Multi-network support**: Uses goroutines to connect to multiple IRC networks concurrently
 - **Lambda integration**: All business logic is handled by external AWS Lambda functions via HTTP POST requests
-- **Event-driven processing**: Uses the go-ircevent library's callback system for IRC event handling
+- **Event-driven processing**: Uses the fluffle/goirc library's callback system for IRC event handling
 - **Retry logic**: Implements exponential backoff for IRC connection failures
 
 ### Configuration Structure
@@ -99,7 +99,7 @@ go mod tidy
 
 ## Dependencies
 
-- **github.com/thoj/go-ircevent**: IRC client library
+- **github.com/fluffle/goirc**: Event-based IRC client framework for Go
 - **github.com/spf13/viper**: Configuration management
 - Standard Go libraries for HTTP, TLS, concurrency, and structured logging (log/slog)
 
