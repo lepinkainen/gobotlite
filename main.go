@@ -134,6 +134,9 @@ func main() {
 			cfg.SSLConfig = &tls.Config{InsecureSkipVerify: true}
 			conn := irc.Client(cfg)
 
+			// Track the nick actually in use; it changes on collision (433)
+			currentNick := config.Nickname
+
 			// Signal when the connection drops so the goroutine can exit
 			quit := make(chan struct{})
 			var quitOnce sync.Once
@@ -158,8 +161,9 @@ func main() {
 			})
 
 			conn.HandleFunc("433", func(conn *irc.Conn, line *irc.Line) {
-				slog.Warn("Nickname is already in use")
-				conn.Nick(config.Nickname + "_")
+				currentNick += "_"
+				slog.Warn("Nickname is already in use, trying alternate", "nick", currentNick)
+				conn.Nick(currentNick)
 			})
 
 			// Handle CTCP VERSION
@@ -182,7 +186,7 @@ func main() {
 
 			// Handle kicks
 			conn.HandleFunc("KICK", func(conn *irc.Conn, line *irc.Line) {
-				if line.Args[1] == config.Nickname {
+				if line.Args[1] == currentNick {
 					slog.Info("Kicked from channel, rejoining", "channel", line.Args[0], "kicked_by", line.Nick)
 					conn.Join(line.Args[0])
 				}
