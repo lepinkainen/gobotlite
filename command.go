@@ -1,15 +1,9 @@
 package main
 
 import (
-	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"log/slog"
-	"net/http"
 	"strings"
-	"time"
 
 	irc "github.com/fluffle/goirc/client"
 )
@@ -26,54 +20,14 @@ type CommandResponse struct {
 	ErrorMessage string `json:"errorMessage"`
 }
 
+func (r CommandResponse) errMsg() string { return r.ErrorMessage }
+
 // fetchLambdaCommand sends a POST request to a Lambda function endpoint with a given payload, and returns the result or an error.
 func fetchLambdaCommand(config *Config, payload *CommandPayload) (string, error) {
-	// Marshal the payload struct into JSON format
-	data, err := json.Marshal(payload)
+	response, err := fetchLambda[CommandResponse](config.LambdaCommand, payload)
 	if err != nil {
 		return "", err
 	}
-
-	slog.Debug("Calling lambda command", "payload", string(data))
-
-	// Construct the HTTP request
-	req, err := http.NewRequest("POST", config.LambdaCommand.Endpoint, bytes.NewBuffer(data))
-	if err != nil {
-		return "", fmt.Errorf("error constructing request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-api-key", config.LambdaCommand.APIKey)
-
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("error doing request: %w", err)
-	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			slog.Error("Failed to close response body", "error", err)
-		}
-	}()
-
-	// Read the response body
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("error reading response body: %w", err)
-	}
-
-	// Unmarshal the response body into a CommandResponse struct
-	var response CommandResponse
-	err = json.Unmarshal(body, &response)
-	if err != nil {
-		return "", fmt.Errorf("error unmarshaling response: %w", err)
-	}
-
-	// Check if the response has an error message
-	if response.ErrorMessage != "" {
-		return "", errors.New(response.ErrorMessage)
-	}
-
-	// Return the result and nil error
 	return response.Result, nil
 }
 
