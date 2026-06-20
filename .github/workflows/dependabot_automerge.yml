@@ -1,0 +1,36 @@
+### This workflow has access to secrets and a read-write token
+name: Dependabot Automerge
+on:
+  workflow_run:
+    workflows: ["Dependabot PR Check"]
+    types:
+      - completed
+
+jobs:
+  automerge:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    permissions:
+      pull-requests: write
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@v3
+        with:
+          github-token: "${{ secrets.GITHUB_TOKEN }}"
+
+      - name: Approve and merge Dependabot PRs
+        if: ${{ steps.metadata.outputs.update-type != 'version-update:semver-major' }}
+        run: |
+          gh pr checkout "$PR_URL"
+          gh pr review --approve "$PR_URL"
+          gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.workflow_run.pull_requests[0].url }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
