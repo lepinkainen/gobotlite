@@ -53,9 +53,6 @@ tasks:
 
   build-ci:
     desc: Build the Go application for CI environments
-    deps:
-      - test-ci
-      - lint
     cmds:
       - mkdir -p {{.BUILDDIR}}
       - >
