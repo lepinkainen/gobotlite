@@ -73,14 +73,16 @@ func (c *Config) Validate() error {
 func connectWithRetry(conn *irc.Conn, server string) error {
 	backoff := time.Second
 	maxBackoff := time.Minute * 5
+	const maxAttempts = 10
 
-	for {
-		err := conn.ConnectTo(server)
+	var err error
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		err = conn.ConnectTo(server)
 		if err == nil {
 			return nil
 		}
 
-		slog.Warn("Connection failed, retrying", "error", err, "backoff", backoff)
+		slog.Warn("Connection failed, retrying", "error", err, "attempt", attempt, "backoff", backoff)
 		time.Sleep(backoff)
 
 		backoff *= 2
@@ -88,6 +90,8 @@ func connectWithRetry(conn *irc.Conn, server string) error {
 			backoff = maxBackoff
 		}
 	}
+
+	return fmt.Errorf("giving up after %d connection attempts: %w", maxAttempts, err)
 }
 
 func main() {
@@ -260,7 +264,7 @@ func main() {
 			server := fmt.Sprintf("%s:%d", network.Server, port)
 			err = connectWithRetry(conn, server)
 			if err != nil {
-				fmt.Printf("Err %s", err)
+				slog.Error("Could not connect to server", "server", server, "error", err)
 				return
 			}
 
